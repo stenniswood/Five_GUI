@@ -1,0 +1,15 @@
+<object class="GtkNotebook">
+    <property name="visible">True</property>
+  <child>
+
+    <object class="GtkLabel" id="pwm_content">
+    <property name="visible">True</property>
+      <property name="label">Content</property>
+    </object>
+  </child>
+  <child type="tab">
+    <object class="GtkLabel" id="notebook-tab">
+      <property name="label">Tab</property>
+    </object>
+  </child>
+</object>
