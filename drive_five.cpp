@@ -1,6 +1,6 @@
 #include <sys/time.h>
 #include <stdlib.h>
-#include <linux/serial.h>
+//#include <linux/serial.h>
 #include <sys/ioctl.h>
 #include <stdint.h>
 #include <math.h>
@@ -49,15 +49,21 @@ void populate_file_in_directory(char* mPath,
 	DIR           *d;
 	struct dirent *dir;
 	d 	= opendir(mPath);
-	if (d)
+	if (d==NULL)
+		perror("\n\n opendir() error: ");
+	else 
 	{
 		// go thru all FILES:
 		while ((dir = readdir(d)) != NULL)
 		{
-			if (dir->d_type==DT_REG)
-			{
-				DriveFive_device_paths.push_back( mPath );
-				DriveFive_device_names.push_back( dir->d_name );
+			if (dir->d_type==DT_CHR)		// Character Device
+			{			
+				bool match = (strstr(dir->d_name, "ttyU")!=NULL);
+				if (match) {
+					printf("FOUND: %s\n", dir->d_name );
+					DriveFive_device_paths.push_back( mPath );
+					DriveFive_device_names.push_back( dir->d_name );
+				}
 			}        
 		}
 		closedir(d);
@@ -70,16 +76,14 @@ void scan_available_boards()
 {
 	DriveFive_device_paths.clear();
 	DriveFive_device_names.clear();		
-	populate_file_in_directory("/dev/ttyU*", DriveFive_device_paths, DriveFive_device_names );
-	printf("Found %d DriveFive boards.", DriveFive_device_names.size() );		
+	//printf("Searching for Five boards...\n\n");
+	populate_file_in_directory("/dev/", DriveFive_device_paths, DriveFive_device_names );
+	printf("Found %ld Drive Five boards.\n", DriveFive_device_names.size() );		
 }
-
-
 
 void open_all_available()
 {
-	DriveFive one;
-	
+	DriveFive one;	
 	for (int i=0; i<DriveFive_device_names.size(); i++)
 	{				
 		string fulldevname = DriveFive_device_paths[i] + DriveFive_device_names[i];
@@ -87,6 +91,17 @@ void open_all_available()
 		fives[i].open( fulldevname.c_str() );
 		fives[i].set_baud(38400);
 	}
+}
+
+int find_board( char* mDeviceName )
+{
+	for (int i=0; i<fives.size(); i++)
+	{
+		char* match = strstr(fives[i].m_port_name, mDeviceName );
+		if (match!=NULL)
+			return i;		
+	}	
+	return -1;
 }
 
 void close_all_fives()
@@ -122,9 +137,67 @@ DriveFive::DriveFive( const char* mDeviceName, uint32_t time_out )
 	timeout = time_out;
 }
 
-void* serial_interface(void* )
+void* serial_interface(void* object)
 {
+	char siBuff[10];
+	int c=0;
+	DriveFive* df = (DriveFive*)object;
+	//printf("serial_interface() %p\n", df);
+	while (df->connected==false) {};		// wait for the open()
+	//printf("\n\tfd=%d\n", df->fd );		
+	bool first_cr = false;
+	while(1)
+	{
+		// Read
+		// Append to RxBuffer 
+		c=0;
+		if (df->available()) {	
+			c = ::read( df->fd, siBuff, 1 );
+		}
+		if (c==-1)
+			perror("serial_interface() read \n");
+		else if (c>0) 
+		{
+			if (df->inside_echo)
+			{
+				df->rx_bytes+=c;	// ignore echo
+				if (siBuff[0] == 13) 
+					first_cr = true;
 
+				// Looking for an edge transition (ie. first char after all the 13's and 10's
+				if ((first_cr) && (siBuff[0]!=13) && (siBuff[0]!=10))
+				{
+					// Remove the echo with confirmation status
+					df->rx_bytes    = 0;
+					df->inside_echo = false;				
+					first_cr = false;
+				}
+			} 
+			if (df->inside_echo==false)
+			{				
+				//if ((siBuff[0]!=13) && (siBuff[0]!=10)) 
+				{
+					//printf("\t%d::read(%c=%d)\n", df->rx_bytes, siBuff[0], siBuff[0] );
+					df->rx_buffer[df->rx_bytes]   = siBuff[0];
+					df->rx_buffer[df->rx_bytes+1] = 0;				
+					df->rx_bytes += c;
+					if (df->rx_bytes >= RX_BUFFER_SIZE)
+					{ printf("overflow\n");	df->rx_bytes = 0;	}
+				}
+				if (siBuff[0]==13)
+				{
+					printf("\t %s;\n", df->rx_buffer );				
+					df->m_has_responded = true;
+					strcpy(&(df->m_response[df->m_response_index]), df->rx_buffer );
+					int len = strlen(df->rx_buffer);
+					df->m_response_index += len;
+					df->rx_bytes = 0;
+					// Detect NAK:
+					bool nak = df->contains_NAK();
+				}
+			}
+		}
+	}
 }
 
 
@@ -136,21 +209,12 @@ void DriveFive::Initialize()
 	fd=0;
 	rx_bytes=0;		 			// rx data bytes in buffer
  	memset( rx_buffer, 0, RX_BUFFER_SIZE );
- 	memset( tx_buffer, 0, TX_BUFFER_SIZE );
 	memset( m_port_name, 0, PORT_NAME_SIZE );
-	tx_bytes  = 0;
+	m_cmd_length  = 0;
+	m_response_index = 0;
 	connected = false;
-	//struct 		pollfd 	serial_poll;
-
-	// Create a thread for reading.  It constantly listens and appends to it's response.
-	// Until a new command is issued.	
-	int thread_result = pthread_create( &read_thread_id, NULL,
-										serial_interface, (void*)this);
-	if (thread_result)
-	{
-		fprintf( stderr, "Error - Could not create right_foot thread. return code: %d\n", thread_result );
-		exit(EXIT_FAILURE);
-	}							
+	inside_echo=true;			// first receive characters will be an echo of the cmd
+	m_has_responded = true;		// allow first command to be sent.
 }
 	
 //
@@ -169,7 +233,7 @@ void DriveFive::set_device_name	( const char* mDeviceName )
 void DriveFive::set_baud(int speed)
 {
 	//_cl_baud = speed;
-	printf("Baudrate = %d\n", speed);
+	//printf("Baudrate = %d\n", speed);
 	struct termios options;
 	tcgetattr  ( fd, 	   		&options);
 	cfsetispeed( &options, 		speed );
@@ -183,18 +247,33 @@ void DriveFive::open(const char* mDeviceName)
 		strcpy(m_port_name, mDeviceName );
 
 	fd = ::open( m_port_name, O_RDWR  ); 		// | O_NONBLOCK		
-//	fd = ::fopen( m_port_name, "r+"  ); 		// | O_NONBLOCK
 	if (fd < 0)
 	{
 		printf("Unable to open serial device: %s - %s\n", m_port_name, strerror(errno) );
     	return ;
 	}	
 
+	//printf("pthread_create()  this=%p\n", this);
+	int thread_result = pthread_create( &read_thread_id, NULL, serial_interface, (void*)this);										
+	if (thread_result)
+	{
+		fprintf( stderr, "Error - Could not create thread. return code: %d\n", thread_result );
+		exit(EXIT_FAILURE);
+	}							
+
 	connected = true;
 	serial_poll.fd = fd;
 	serial_poll.events  |= POLLIN;
 	serial_poll.revents |= POLLIN;	
-	printf("DriveFive : opened port=%s\n", m_port_name );	
+	printf("DriveFive : opened port=%s; \n", m_port_name );	
+}
+
+int DriveFive::available()
+{
+	int retval = poll( &serial_poll, 1, 5 );	// 20 ms timeout
+	if (serial_poll.revents & POLLIN)
+		return TRUE;
+	return FALSE;
 }
 
 char DriveFive::serialGetchar()
@@ -226,41 +305,10 @@ char DriveFive::serialGetchar()
 	}
 }
 
-int DriveFive::available()
-{
-	int retval = poll( &serial_poll, 1, 5 );	// 20 ms timeout
-	if (serial_poll.revents & POLLIN)
-		return TRUE;
-	return FALSE;
-}
-
 void DriveFive::clear()
 {
 	while(available())
 		serialGetchar();
-}
-
-/* NOTE: Instead of all this,
-		Just make 1 function which sends whatever telegram you want!
-		Don't need separate member functions for each command!
-*/
-bool DriveFive::send_command(char* mFiveCommand) 
-{
-	// Clear Response buffer (start over)
-	restart_response();
-	
-	tx_bytes = strlen(mFiveCommand);	
-	size_t retval = ::write( fd, mFiveCommand, tx_bytes );	// if this blocks, we are okay.	
-	if (retval == -1)
-		perror("Error - send_command() ");
-
-	// Send the Deliminator!
-	retval = ::write( fd, (char*)"\r\n", 2 );	// if this blocks, we are okay.	
-	if (retval == -1)
-		perror("Error - send_command() ");
-
-	printf("send_command() done!\n");	
-	return retval>0;
 }
 
 bool DriveFive::is_pid_done( char Letter )
@@ -276,8 +324,38 @@ bool DriveFive::contains_NAK( )
 
 void DriveFive::restart_response( )
 {
+	memset(rx_buffer,  0, sizeof(rx_buffer) );
 	memset(m_response, 0, sizeof(m_response) );
 	rx_bytes = 0;
+	m_response_index = 0;
+	inside_echo=true;
+	m_has_responded = false;
+}
+
+
+/* NOTE: Instead of all this,
+		Just make 1 function which sends whatever telegram you want!
+		Don't need separate member functions for each command!
+*/
+bool DriveFive::send_command( const char* mFiveCommand) 
+{
+	while (m_has_responded==false) {};		// wait until previous command is finished.
+	
+	// Clear Response buffer (start over)
+	restart_response();
+
+	m_cmd_length = strlen(mFiveCommand);	
+	size_t retval = ::write( fd, mFiveCommand, m_cmd_length );	// if this blocks, we are okay.	
+	if (retval == -1)
+		perror("Error - send_command() ");
+
+	// Send the Deliminator!
+	retval = ::write( fd, (char*)"\r\n", 2 );	// if this blocks, we are okay.	
+	if (retval == -1)
+		perror("Error - send_command() ");
+
+	//printf("send_command() done!\n");	
+	return retval>0;
 }
 
 /* Would like this to continually receive data, adding to the rx buffer.

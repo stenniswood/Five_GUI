@@ -91,7 +91,7 @@ static void activate (GtkApplication* app,
   GtkWidget *button_box;  
 
   window = gtk_application_window_new (app);
-  gtk_window_fullscreen(GTK_WINDOW (window));
+  //gtk_window_fullscreen(GTK_WINDOW (window));
   
   gtk_window_set_title (GTK_WINDOW (window), "Control Panel");
   gtk_window_set_default_size (GTK_WINDOW (window), 400, 200);

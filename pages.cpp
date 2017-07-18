@@ -6,7 +6,7 @@
 
 
 extern DriveFive five;
-extern GtkWidget *bk_image;
+//extern GtkWidget *bk_image;
 float pwms[5];
 GtkWidget* v_pwm;
 GtkWidget* w_pwm;
@@ -42,9 +42,9 @@ void cb_pwm_change(GtkWidget *range, gpointer  user_data)
 	pwms[2] = gtk_range_get_value((GtkRange*)x_pwm)/100.0;	
 	pwms[3] = gtk_range_get_value((GtkRange*)y_pwm)/100.0;	
 	pwms[4] = gtk_range_get_value((GtkRange*)z_pwm)/100.0;
+	compose_pwm_command( cmd );
 	if (IsActive) 
 	{
-		compose_pwm_command( cmd );
 		five.send_command  ( cmd );
 	}
 	else printf("not active!\n");
@@ -61,6 +61,7 @@ void change_use_encoder_pots (GtkButton *button, gpointer   user_data)
 	else 
 		sprintf(msg, "use potentiometer %c", *(char*)user_data );
 	printf("%s\n", msg);
+	strcpy(last_operation, msg);
 	five.send_command( msg );
 }
 
@@ -131,7 +132,6 @@ void encoder_selection_setup()
 	GtkWidget* z_e_fb = gtk_radio_button_new_with_label(NULL,"Z");		// feedback
 	GtkWidget* z_p_fb = gtk_radio_button_new_with_label(NULL,"Z");		// feedback
 
-	 
 	GSList* use_group = gtk_radio_button_get_group (GTK_RADIO_BUTTON (use_encoders));	
 	gtk_radio_button_join_group ((GtkRadioButton*)use_pots, (GtkRadioButton*)use_encoders);	
 
@@ -147,7 +147,6 @@ void encoder_selection_setup()
 	g_signal_connect ( y_p_fb, "clicked", (GCallback)change_use_encoder_pots, ys);
 	g_signal_connect ( z_e_fb, "clicked", (GCallback)change_use_encoder_pots, zs);
 	g_signal_connect ( z_p_fb, "clicked", (GCallback)change_use_encoder_pots, zs);
-
 	
 	gtk_grid_attach (GTK_GRID (source_encoder_pot), use_encoders, 0, 0, 1, 1);	
 	gtk_grid_attach (GTK_GRID (source_encoder_pot), use_pots, 0, 1, 1, 1);	
@@ -165,8 +164,7 @@ void encoder_selection_setup()
 	gtk_grid_attach (GTK_GRID (source_encoder_pot), y_p_fb, 4, 1, 1, 1);	
 	
 	gtk_grid_attach (GTK_GRID (source_encoder_pot), z_e_fb, 5, 0, 1, 1);
-	gtk_grid_attach (GTK_GRID (source_encoder_pot), z_p_fb, 5, 1, 1, 1);	
-	
+	gtk_grid_attach (GTK_GRID (source_encoder_pot), z_p_fb, 5, 1, 1, 1);
 }
 
 void pwm_setup()
@@ -194,10 +192,8 @@ void pwm_setup()
 
 	gtk_grid_attach (GTK_GRID (pwm_page), source_encoder_pot, 1, 0, 1, 1);	
 	gtk_grid_attach (GTK_GRID (pwm_page), slider_grid,   0, 1, 1, 1);
-	gtk_grid_attach (GTK_GRID (pwm_page), action_items,  0, 2, 1, 1);
-	
+	gtk_grid_attach (GTK_GRID (pwm_page), action_items,  0, 2, 1, 1);	
 }
-
 
 
 

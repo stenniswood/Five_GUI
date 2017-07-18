@@ -7,10 +7,10 @@
 #include <poll.h>
 #include <vector>
 #include <string>
+#include <pthread.h>
 
-
-#define TX_BUFFER_SIZE 100
-#define RX_BUFFER_SIZE 100
+#define TX_BUFFER_SIZE 200
+#define RX_BUFFER_SIZE 200
 
 
 /******************************************************************************
@@ -29,12 +29,17 @@ extern vector<string> DriveFive_device_names;
 void scan_available_boards();
 void open_all_available();
 void close_all_fives();
+int find_board( char* mDeviceName );
+void* serial_interface(void* object);
+
 
 class DriveFive 
 {
 	uint16_t crc;
 	uint32_t timeout;
-
+	friend void* serial_interface(void* object);
+	friend int find_board( char* mDeviceName );
+	
 public:
 	// public methods
 	DriveFive( );
@@ -51,34 +56,39 @@ public:
 	
 	int 	available		( );
 	char	serialGetchar	( );
-	bool 	send_command	( char* mFiveCommand  );
+	bool 	send_command	( const char* mFiveCommand  );
 	bool 	read_response	(  );
 	void 	clear			( );
 	void 	restart_response( );
 	bool 	contains_NAK    ( );
 
 	bool 	is_pid_done		( char Letter );
-//	void* 	serial_interface( void* );
+	bool 	get_has_responded	( )		{ return m_has_responded; };
+
 	
-	char	 m_response[2048];
-		
 private:
-	bool		pid_done[5];
-	pthread_t 	read_thread_id;				
-				
-	int  		fd;
+	char	 	m_port_name[PORT_NAME_SIZE];
+	int  	 	fd;
+	bool	 	connected;
+
+	// RxBuffer & Response : 	
+	pthread_t 	read_thread_id;		
+	char	 	m_response[2048];
+	int		 	m_response_index;
+	bool		m_has_responded;
 	int			rx_bytes;		 			// rx data bytes in buffer
  	char		rx_buffer[RX_BUFFER_SIZE];
- 	char		tx_buffer[TX_BUFFER_SIZE];
-	int 		tx_bytes;
+	bool 		inside_echo;
 
-	char	 	m_port_name[PORT_NAME_SIZE];
-	bool	 	connected;
+	// COMMAND VARS :
+ 	char		m_command[TX_BUFFER_SIZE];	// hold the last transmitted cmd for echo cancelation.
+	int 		m_cmd_length;
+
+	bool		pid_done[5];
+
 	struct 		pollfd 	serial_poll;	
-	
 	bool 	 	write_n	(uint8_t mbyte,...);
-	bool 	 	read_n		(uint8_t mbyte,uint8_t address,uint8_t cmd,...);
-	
+	bool 	 	read_n	(uint8_t mbyte,uint8_t address,uint8_t cmd,...);	
 };
 
 

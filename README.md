@@ -19,4 +19,7 @@ BUILD:
 	make clean
 	make
 
+RUN:
+====
+	./bk_panel
 

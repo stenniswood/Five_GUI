@@ -101,8 +101,6 @@ void status_setup()
 	status_page = gtk_grid_new();
 	gtk_grid_set_column_homogeneous( (GtkGrid*)status_page, TRUE);	
 	
-	GtkWidget * command_text = gtk_entry_new( );
-	
 	GdkColor color;
 	color.red = 0x7fff;
 	color.blue = 0x0000;
@@ -116,9 +114,7 @@ void status_setup()
 	// SETUP STATUS OVER-ALL PAGE:
 	gtk_grid_attach (GTK_GRID (status_page), limit_switches_group, 0, 0, 1, 1);
 	gtk_grid_attach (GTK_GRID (status_page), currents_group, 	   1, 0, 1, 1);
-	gtk_grid_attach (GTK_GRID (status_page), command_text, 0, 1, 3, 1);	
 	gtk_grid_attach (GTK_GRID (status_page), action_items, 0, 2, 3, 1);
-
 }
 
 

@@ -42,6 +42,8 @@ void sequencer_add_entry(char* DeviceName, char* mCommand, char* mResponse)
 	 -1);
 }
 
+#define PID_TIMEOUT_MS 5000
+
 gboolean  seq_play_foreach_func (GtkTreeModel *model,
                 GtkTreePath  *path,
                 GtkTreeIter  *iter,
@@ -55,14 +57,17 @@ gboolean  seq_play_foreach_func (GtkTreeModel *model,
                         DEVICE,  &device,
                         COMMAND, &command,  -1 );                        
 
+	// SEND COMMAND TO FIVE:
     tree_path_str = gtk_tree_path_to_string(path);
     g_print ("Row %s:\t%s\t%s\n", tree_path_str, device, command );
 	five.send_command( command );
 
+	// PAUSE FOR TIME STEP:	
 	double theStep = gtk_spin_button_get_value( (GtkSpinButton*)step_time );
 	int time_step = fabs(theStep);
 	usleep( time_step*1000 );		// Pause between every line of execution.  ie Playback rate.
 	
+	// PAUSE FOR USER REQUESTED DELAY :
 	if (strstr(command,"delay")!=NULL)	// if the command is a "delay 500 ms"
 	{
 		char* delay_ptr = strchr(command, ' ')+1;
@@ -72,6 +77,25 @@ gboolean  seq_play_foreach_func (GtkTreeModel *model,
 		usleep( delay_ms * 1000 );					// Delay!
 	}
 
+	// WAIT FOR PID axis:
+	char cmd_key[] = "wait for pid";
+	if (strstr(command,cmd_key)!=NULL)	// if the command is a "delay 500 ms"
+	{
+		char* delay_ptr = command+strlen(cmd_key);		// search after 'Wait PID' for v w x y z
+
+		int selected_board = find_board( device );
+		long int timeout = 0;
+		while (fives[selected_board].is_pid_done( 'v' )==FALSE )
+		{
+			usleep(1000);
+			// nothing
+			timeout++;
+			if (timeout > PID_TIMEOUT_MS)
+				break;
+		}
+	}
+	
+	
     g_free(tree_path_str);
     g_free(device );    /* gtk_tree_model_get made copies of       */
     g_free(command);    /* the strings for us when retrieving them */
@@ -138,7 +162,6 @@ void seq_action_buttons_setup()
 	step_time  = gtk_spin_button_new_with_range(0.0, 10000, 10);
 	gtk_spin_button_set_value( (GtkSpinButton*)delay_time, 250.0 );
 	gtk_spin_button_set_value( (GtkSpinButton*)step_time, 100.0 );
-	
 
 	gtk_grid_attach (GTK_GRID (seq_buttons), step_time_label, 0, 0, 1, 1);		
 	gtk_grid_attach (GTK_GRID (seq_buttons), step_time, 1, 0, 1, 1);		
@@ -154,7 +177,7 @@ void seq_action_buttons_setup()
 	g_signal_connect ( play, "clicked", (GCallback)cb_play_sequence, NULL);		
 	g_signal_connect ( stop, "clicked", (GCallback)cb_stop_sequencer, NULL);		
 	g_signal_connect ( delay, "clicked", (GCallback)cb_add_delay_to_sequencer, NULL);
-	g_signal_connect ( delay, "clicked", (GCallback)cb_add_wait_pid_to_sequencer, NULL);
+	g_signal_connect ( wait_pid, "clicked", (GCallback)cb_add_wait_pid_to_sequencer, NULL);
 						
 }
 

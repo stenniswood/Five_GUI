@@ -32,7 +32,7 @@ void about_setup()
 	about_page = gtk_grid_new();
 	gtk_grid_set_column_homogeneous( (GtkGrid*)about_page, TRUE);	
 	    
-	mk_image = cairo_image_surface_create_from_png("bk_bridge_title.png");
+	mk_image = cairo_image_surface_create_from_png("images/bk_bridge_title.png");
 	g_signal_connect (G_OBJECT (about_page), "draw", G_CALLBACK(about_window_draw_cb), mk_image);
 	
 	gtk_grid_attach (GTK_GRID (about_page), (GtkWidget*)mk_image, 0, 0, 1, 1);
